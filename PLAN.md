@@ -6,23 +6,17 @@ An automated narrative writer for AI agent traces. Structured narratives (goal, 
 
 ## Exercise Sequence
 
-### Exercise 1: Build a Real Agent
+### Exercise 1: Build a Real Agent  [DONE]
 
 **Goal**: Replace the stub in `main.py` with a proper multi-step LangChain agent.
 
-The current code just calls a model -- there's nothing to trace yet. We need an agent that uses tools and reasons across multiple steps so the callback data is meaningful.
+**Status**: Complete. `main.py` now runs an account research agent with two tools:
+- `web_search` (Tavily) for public/external info
+- `lookup_account` against an in-memory `ACCOUNTS_DB` of mock CRM records (Acme Corp, Globex, Initech)
 
-**What to build**:
-- Use `create_react_agent` or `create_tool_calling_agent`
-- Wire up 2-3 tools: web search (Tavily or DuckDuckGo), a calculator, and a mock data lookup (e.g., fake customer or product DB)
-- Give it a task that forces multi-step reasoning: e.g., "Research company X, find their revenue, calculate their YoY growth rate"
-- Run it and observe the output
+Default task: "Build me an account brief on Acme Corp" -- forces both tools to fire and produces a multi-step trace suitable for Exercise 2.
 
-**Learning objective**: Understand the ReAct loop -- how the agent decides which tool to call, when to stop, and how tool results feed back into reasoning.
-
-**Questions to answer after**:
-- How many LLM calls does a typical run make?
-- When does the agent decide it has enough information?
+ReAct learning objectives skipped intentionally (already familiar).
 
 ---
 
