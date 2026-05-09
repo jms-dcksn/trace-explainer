@@ -1,0 +1,11 @@
+[project]
+name = "trace-explainer"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "langchain>=1.2.18",
+    "langchain-openai>=1.2.1",
+    "tavily-python>=0.7.24",
+]
