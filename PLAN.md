@@ -20,16 +20,18 @@ ReAct learning objectives skipped intentionally (already familiar).
 
 ---
 
-### Exercise 2: Build the Capture Middleware
+### Exercise 2: Build the Capture Middleware  [DONE]
 
 **Goal**: Capture every meaningful event from the agent run into a normalized intermediate format -- the contract between the capture layer and the explainer.
 
-**Approach**: Use LangChain's agent middleware (`langchain.agents.middleware`), not the legacy `BaseCallbackHandler`. Middleware is the supported path for `create_agent` going forward, gives typed inputs (`AgentState`, `ModelRequest`, `ModelResponse`) instead of a nested run tree, and lets the capture buffer live on agent state rather than handler instance attributes.
+**Status**: Complete. `CaptureMiddleware` in `main.py` implements `after_model` (emits `agent_thought` + `tool_call` events, or `final_answer` when no tool calls) and `wrap_tool_call` (emits `tool_result` and packages the `ToolMessage` plus trace event into a single `Command` update). Trace lives on a `TraceState(AgentState)` subclass under a `trace` key with an `operator.add` reducer. `test_capture.py` runs the full path against a `FakeMessagesListChatModel` -- no OpenAI/Tavily creds needed -- and exercises the empty-content tool-call branch, the thought+tool-call branch, and the final-answer branch.
 
-**What to build**:
-- Implement three hooks: `after_model` (capture agent thoughts and tool-call decisions from the latest `AIMessage`), `wrap_tool_call` (capture tool input/output around `handler(request)`), and detect the final answer when `after_model` produces an `AIMessage` with no tool calls.
-- Store captured events on a custom `AgentState` subclass via `Command(update=...)` from `wrap_model_call` / `wrap_tool_call`, so the trace co-locates with the messages list (useful for Exercise 4).
-- Normalize to this intermediate format:
+**Approach used**: LangChain's agent middleware (`langchain.agents.middleware`), not the legacy `BaseCallbackHandler`. Middleware is the supported path for `create_agent` going forward, gives typed inputs (`AgentState`, `ModelRequest`, `ModelResponse`) instead of a nested run tree, and lets the capture buffer live on agent state rather than handler instance attributes.
+
+**What was built**:
+- Three hooks: `after_model` (capture agent thoughts and tool-call decisions from the latest `AIMessage`), `wrap_tool_call` (capture tool input/output around `handler(request)`), and detect the final answer when `after_model` produces an `AIMessage` with no tool calls.
+- Events stored on a custom `AgentState` subclass via `Command(update=...)` from `wrap_tool_call`, so the trace co-locates with the messages list (useful for Exercise 4).
+- Normalized intermediate format:
 
 ```json
 [
@@ -52,7 +54,9 @@ This JSON is the stable contract. The explainer prompt in Exercise 3 is written 
 
 ---
 
-### Exercise 3: Write the Narrative (Middleware Approach)
+### Exercise 3: Write the Narrative  [IN PROGRESS]
+
+**Implemented as a standalone module (`narrator.py`), not middleware.** Rationale: the intermediate JSON contract from Exercise 2 is the whole point -- the narrator must be independent of capture source so Exercises 4 (messages-list input), 6 (LangSmith), and 7 (OTEL) can reuse it. `narrate(task, trace) -> Narrative` is wired into `main.py` after `agent.invoke(...)`.
 
 **Goal**: Feed the aggregated trace to a second LLM call to produce a structured narrative.
 

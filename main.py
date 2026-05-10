@@ -10,13 +10,16 @@ from langchain.agents.middleware import (
     ModelRequest,  # noqa: F401  (re-exported for downstream use)
     ModelResponse,  # noqa: F401
 )
-from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, ToolMessage
+from langchain.messages import AIMessage, ToolMessage
+from langchain.chat_models import init_chat_model
 from langchain_openai import ChatOpenAI
 from langgraph.prebuilt.tool_node import ToolCallRequest
 from langgraph.runtime import Runtime
 from langgraph.types import Command
 from tavily import TavilyClient
+from pydantic import BaseModel
+
+from narrator import narrate
 
 
 # ---------------------------------------------------------------------------
@@ -32,6 +35,9 @@ class TraceState(AgentState):
 
     trace: NotRequired[Annotated[list[TraceEvent], operator.add]]
 
+class AgentOutput(BaseModel):
+    response: str
+    agent_summary: str
 
 # ---------------------------------------------------------------------------
 # Capture middleware
@@ -271,11 +277,12 @@ SYSTEM_PROMPT = (
     "with recent public information (via web_search) to produce a concise "
     "account brief covering: relationship status, recent external developments, "
     "and 2-3 talking points or risks to flag for the account owner."
+    "Output the response to the user query, and a summary of how you solved the query."
 )
 
 
 def build_agent(
-    model: BaseChatModel,
+    model: str,
     tools: Sequence[Callable[..., Any]] | None = None,
     extra_middleware: Sequence[AgentMiddleware] = (),
 ):
@@ -285,19 +292,15 @@ def build_agent(
         tools=list(tools) if tools is not None else [web_search, lookup_account],
         system_prompt=SYSTEM_PROMPT,
         middleware=[CaptureMiddleware(), *extra_middleware],
+        response_format=AgentOutput
     )
 
 
 def main():
-    model = ChatOpenAI(name="gpt-4.1")
+    model = init_chat_model("openai:gpt-5.4-mini")
     agent = build_agent(model)
-    result = agent.invoke(
-        {
-            "messages": [
-                {"role": "user", "content": "Build me an account brief on Acme Corp."}
-            ]
-        }
-    )
+    task = "Build me an account brief on Acme Corp."
+    result = agent.invoke({"messages": [{"role": "user", "content": task}]})
 
     print("\n" + "=" * 72)
     print("FINAL RESULT")
@@ -308,6 +311,12 @@ def main():
     print("CAPTURED TRACE (normalized intermediate format)")
     print("=" * 72)
     print(json.dumps(result.get("trace", []), indent=2, default=str))
+
+    print("\n" + "=" * 72)
+    print("NARRATIVE")
+    print("=" * 72)
+    narrative = narrate(task=task, trace=result.get("trace", []))
+    print(narrative.model_dump_json(indent=2))
 
 
 if __name__ == "__main__":
