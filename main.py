@@ -1,16 +1,23 @@
-from langchain_core.callbacks import BaseCallbackHandler
 from typing import Any, Dict, List
 from langchain_openai import ChatOpenAI
 from langchain.agents import create_agent
 from tavily import TavilyClient
+from langgraph.runtime import Runtime
+from langchain.agents.middleware import (
+    AgentMiddleware,
+    AgentState,
+    ModelRequest,
+    ModelResponse,
+)
 
+class LoggingMiddleware(AgentMiddleware):
+    def before_model(self, state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
+        print(f"About to call model with {len(state['messages'])} messages")
+        return None
 
-class MyCustomHandler(BaseCallbackHandler):
-    def on_llm_start(self, serialized: Dict[str, Any], prompts: List[str], **kwargs: Any) -> Any:
-        print(f"LLM started with prompt: {prompts[0]}")
-
-    def on_llm_end(self, response: Any, **kwargs: Any) -> Any:
-        print("LLM finished generating!")
+    def after_model(self, state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
+        print(f"Model returned: {state['messages'][-1]}")
+        return None
 
 
 # Mock internal CRM/account database
@@ -68,8 +75,7 @@ def lookup_account(company_name: str) -> str:
     return f"No internal account found for '{company_name}'. Known accounts: {[a['name'] for a in ACCOUNTS_DB]}"
 
 
-handler = MyCustomHandler()
-model = ChatOpenAI(name="gpt-4.1", callbacks=[handler])
+model = ChatOpenAI(name="gpt-4.1")
 agent = create_agent(
     model=model,
     tools=[web_search, lookup_account],
@@ -80,6 +86,7 @@ agent = create_agent(
         "account brief covering: relationship status, recent external developments, "
         "and 2-3 talking points or risks to flag for the account owner."
     ),
+    middleware=[LoggingMiddleware()]
 )
 
 
@@ -87,7 +94,7 @@ def main():
     result = agent.invoke(
         {"messages": [{"role": "user", "content": "Build me an account brief on Acme Corp."}]}
     )
-    print(result["messages"][-1].content)
+    #print(result["messages"][-1].content)
 
 
 if __name__ == "__main__":
