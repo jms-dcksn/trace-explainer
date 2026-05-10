@@ -48,6 +48,8 @@ This JSON is the stable contract. The explainer prompt in Exercise 3 is written 
 - Which fields did you have to infer vs. read directly from the middleware inputs?
 - What's missing that you'd want a narrator to know?
 
+**Follow-up to explore (deferred)**: When the model emits an `AIMessage` with tool calls and *no* text content, the `after_model` hook has no real "thought" to capture -- we currently fall back to a synthetic placeholder (`"(no commentary) decided to call: <tool>"`). An intermediate LLM call that summarizes the prior messages into the implied reasoning would produce a richer `agent_thought` event, but it adds latency, cost, and a second model dependency to every tool-call step. Worth A/B-testing in Exercise 4 (does it improve narrative quality enough to justify the spend?), not worth doing by default.
+
 ---
 
 ### Exercise 3: Write the Narrative (Middleware Approach)
