@@ -297,7 +297,7 @@ def build_agent(
 
 
 def main():
-    model = init_chat_model("openai:gpt-5.4-mini")
+    model = ChatOpenAI(model="gpt-5.5", reasoning_effort="medium", use_responses_api=True)
     agent = build_agent(model)
     task = "Build me an account brief on Acme Corp."
     result = agent.invoke({"messages": [{"role": "user", "content": task}]})
