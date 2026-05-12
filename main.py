@@ -1,6 +1,10 @@
 import json
 import operator
+import re
+import sys
+import time
 from dataclasses import replace as dataclass_replace
+from pathlib import Path
 from typing import Annotated, Any, Callable, NotRequired, Sequence
 
 from langchain.agents import create_agent
@@ -19,7 +23,7 @@ from langgraph.types import Command
 from tavily import TavilyClient
 from pydantic import BaseModel
 
-from narrator import narrate
+from narrator import narrate, narrate_from_messages, narrate_from_trace
 
 
 # ---------------------------------------------------------------------------
@@ -296,7 +300,177 @@ def build_agent(
     )
 
 
+# ---------------------------------------------------------------------------
+# Exercise 4: comparison harness
+# ---------------------------------------------------------------------------
+
+
+# 3-5 tasks chosen to exercise a spread of agent behaviors:
+#   - simple single-tool lookup
+#   - canonical multi-tool brief (matches Exercise 1's default)
+#   - multi-tool brief on a different account (variance check)
+#   - unknown account -- forces the agent to pivot or admit ignorance
+#   - comparison across two accounts -- multiple lookups + synthesis
+COMPARISON_TASKS = [
+    "What is the renewal date for Initech?",
+    "Build me an account brief on Acme Corp.",
+    "Build me an account brief on Globex.",
+    "Build me an account brief on Wayne Enterprises.",
+    "Compare Acme Corp and Globex on renewal risk.",
+]
+
+
+def _slug(text: str) -> str:
+    s = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+    return s[:60] or "task"
+
+
+def _serialize_messages_for_json(messages: list[Any]) -> list[dict[str, Any]]:
+    out = []
+    for m in messages:
+        entry: dict[str, Any] = {
+            "type": type(m).__name__,
+            "content": getattr(m, "content", None),
+        }
+        tcs = getattr(m, "tool_calls", None)
+        if tcs:
+            entry["tool_calls"] = [
+                {"name": tc.get("name"), "args": tc.get("args", {})} for tc in tcs
+            ]
+        name = getattr(m, "name", None)
+        if name:
+            entry["name"] = name
+        out.append(entry)
+    return out
+
+
+def run_comparison(
+    tasks: Sequence[str] = COMPARISON_TASKS,
+    out_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Run each task once, narrate from trace AND from messages, write artifacts."""
+    out_dir = out_dir or Path(__file__).parent / "results" / "exercise4"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    model = ChatOpenAI(model="gpt-5.5", reasoning_effort="medium", use_responses_api=True)
+    agent = build_agent(model)
+
+    rows: list[dict[str, Any]] = []
+
+    for i, task in enumerate(tasks, 1):
+        print(f"\n{'#' * 72}\n# [{i}/{len(tasks)}] {task}\n{'#' * 72}")
+
+        t0 = time.perf_counter()
+        result = agent.invoke({"messages": [{"role": "user", "content": task}]})
+        agent_latency = time.perf_counter() - t0
+
+        trace = result.get("trace", [])
+        messages = result.get("messages", [])
+
+        print(f"\n-- narrating from trace ({len(trace)} events) --")
+        from_trace = narrate_from_trace(task, trace)
+        print(f"-- narrating from messages ({len(messages)} messages) --")
+        from_messages = narrate_from_messages(task, messages)
+
+        record = {
+            "task": task,
+            "agent_latency_s": round(agent_latency, 2),
+            "trace_event_count": len(trace),
+            "message_count": len(messages),
+            "final_answer": (
+                messages[-1].content if messages else None
+            ),
+            "trace": trace,
+            "messages": _serialize_messages_for_json(messages),
+            "from_trace": {
+                "narrative": from_trace.narrative.model_dump(),
+                "input_tokens": from_trace.input_tokens,
+                "output_tokens": from_trace.output_tokens,
+                "latency_s": round(from_trace.latency_s, 2),
+            },
+            "from_messages": {
+                "narrative": from_messages.narrative.model_dump(),
+                "input_tokens": from_messages.input_tokens,
+                "output_tokens": from_messages.output_tokens,
+                "latency_s": round(from_messages.latency_s, 2),
+            },
+        }
+        rows.append(record)
+
+        slug = f"{i:02d}-{_slug(task)}"
+        (out_dir / f"{slug}.json").write_text(json.dumps(record, indent=2, default=str))
+        print(f"wrote {out_dir / f'{slug}.json'}")
+
+    summary_path = out_dir / "summary.md"
+    summary_path.write_text(_render_summary(rows))
+    print(f"\nwrote {summary_path}")
+    return {"rows": rows, "out_dir": str(out_dir)}
+
+
+def _render_summary(rows: list[dict[str, Any]]) -> str:
+    lines: list[str] = []
+    lines.append("# Exercise 4: Trace vs. Messages Narration\n")
+    lines.append(
+        "Per-task comparison of narratives produced from the structured trace "
+        "(Exercise 2 contract) vs. the agent's raw messages list.\n"
+    )
+    lines.append("## Token / latency table\n")
+    lines.append(
+        "| # | Task | Trace events | Msgs | Trace in/out tok | Msgs in/out tok | Trace lat (s) | Msgs lat (s) |"
+    )
+    lines.append("|---|---|---|---|---|---|---|---|")
+    for i, r in enumerate(rows, 1):
+        lines.append(
+            f"| {i} | {r['task']} | {r['trace_event_count']} | {r['message_count']} | "
+            f"{r['from_trace']['input_tokens']}/{r['from_trace']['output_tokens']} | "
+            f"{r['from_messages']['input_tokens']}/{r['from_messages']['output_tokens']} | "
+            f"{r['from_trace']['latency_s']} | {r['from_messages']['latency_s']} |"
+        )
+
+    # Totals
+    t_in = sum(r["from_trace"]["input_tokens"] for r in rows)
+    t_out = sum(r["from_trace"]["output_tokens"] for r in rows)
+    m_in = sum(r["from_messages"]["input_tokens"] for r in rows)
+    m_out = sum(r["from_messages"]["output_tokens"] for r in rows)
+    lines.append(
+        f"\n**Totals** -- trace: {t_in} in / {t_out} out tokens. "
+        f"messages: {m_in} in / {m_out} out tokens. "
+        f"Δ input: {m_in - t_in:+d} ({((m_in - t_in) / t_in * 100) if t_in else 0:+.1f}%)."
+    )
+
+    lines.append("\n## Side-by-side narratives\n")
+    for i, r in enumerate(rows, 1):
+        lines.append(f"### {i}. {r['task']}\n")
+        lines.append("**Final answer:**\n")
+        lines.append(f"> {r['final_answer']}\n")
+        for label, key in (("From trace", "from_trace"), ("From messages", "from_messages")):
+            n = r[key]["narrative"]
+            lines.append(f"#### {label}\n")
+            lines.append(f"- **Goal:** {n['goal']}")
+            lines.append("- **Steps taken:**")
+            for s in n["steps_taken"]:
+                lines.append(f"  - {s}")
+            lines.append("- **Decisions made:**")
+            if n["decisions_made"]:
+                for d in n["decisions_made"]:
+                    lines.append(f"  - {d}")
+            else:
+                lines.append("  - _(none)_")
+            lines.append(f"- **Summary:** {n['summary']}\n")
+        lines.append("---\n")
+
+    lines.append("## Observations\n")
+    lines.append("_(fill in after reviewing the runs: which narrative is more accurate? "
+                 "Where does the messages version add reasoning the trace version misses? "
+                 "Where does the trace version stay cleaner? Token / latency tradeoff worth it?)_\n")
+    return "\n".join(lines)
+
+
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "compare":
+        run_comparison()
+        return
+
     model = ChatOpenAI(model="gpt-5.5", reasoning_effort="medium", use_responses_api=True)
     agent = build_agent(model)
     task = "Build me an account brief on Acme Corp."

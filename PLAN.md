@@ -54,7 +54,7 @@ This JSON is the stable contract. The explainer prompt in Exercise 3 is written 
 
 ---
 
-### Exercise 3: Write the Narrative  [IN PROGRESS]
+### Exercise 3: Write the Narrative  [DONE]
 
 **Implemented as a standalone module (`narrator.py`), not middleware.** Rationale: the intermediate JSON contract from Exercise 2 is the whole point -- the narrator must be independent of capture source so Exercises 4 (messages-list input), 6 (LangSmith), and 7 (OTEL) can reuse it. `narrate(task, trace) -> Narrative` is wired into `main.py` after `agent.invoke(...)`.
 
@@ -77,7 +77,7 @@ This JSON is the stable contract. The explainer prompt in Exercise 3 is written 
 
 ---
 
-### Exercise 4: The Comparison Experiment
+### Exercise 4: The Comparison Experiment  [IN PROGRESS]
 
 **Goal**: Produce the same narrative from the agent's message history and compare it to the middleware-captured trace.
 
