@@ -28,7 +28,7 @@ The capture middleware is a LangChain 1.0 `AgentMiddleware` that emits typed eve
 Requires Python 3.13+ and [`uv`](https://docs.astral.sh/uv/).
 
 ```bash
-git clone <repo> && cd trace-explainer
+git clone https://github.com/jms-dcksn/trace-explainer.git && cd trace-explainer
 uv sync
 
 export OPENAI_API_KEY=sk-...
