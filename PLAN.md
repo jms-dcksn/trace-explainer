@@ -77,7 +77,7 @@ This JSON is the stable contract. The explainer prompt in Exercise 3 is written 
 
 ---
 
-### Exercise 4: The Comparison Experiment  [IN PROGRESS]
+### Exercise 4: The Comparison Experiment  [DONE]
 
 **Goal**: Produce the same narrative from the agent's message history and compare it to the middleware-captured trace.
 

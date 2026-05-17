@@ -8,4 +8,5 @@ dependencies = [
     "langchain>=1.2.18",
     "langchain-openai>=1.2.1",
     "tavily-python>=0.7.24",
+    "streamlit>=1.40.0",
 ]

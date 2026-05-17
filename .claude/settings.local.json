@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv sync *)",
+      "Bash(uv run *)",
+      "Bash(echo \"PID: $!\")",
+      "Bash(curl -s http://localhost:8765/_stcore/health)",
+      "Bash(kill %1)",
+      "Bash(wait)",
+      "Bash(lsof -ti:8765)",
+      "Bash(xargs kill)"
+    ]
+  }
+}
